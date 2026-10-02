@@ -1,5 +1,7 @@
 # MATHutrice
 
+Design Document: [EPF-MDE/MATHutrice#83](https://github.com/EPF-MDE/MATHutrice/issues/83)
+
 An LLM-based tutor that helps EPF first-year students practise mathematical
 tools. A student signs in, picks a **notion** (trigonometry, logarithms,
 polynomials…), and works through **competences** with generated exercises —
