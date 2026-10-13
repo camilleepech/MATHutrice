@@ -34,3 +34,19 @@ jobs:
       - run: uv run tach check
 
       - run: uv run python scripts/check_cycles.py
+
+  # The Lab 2 tests. Beside architecture, with no `needs:`: each check reports
+  # on its own. conftest.py gives the LLM client dummy settings, so no `.env`.
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+
+      - run: uv sync
+
+      - run: uv run pytest
