@@ -116,6 +116,49 @@ The first call answers `303` with a `Set-Cookie: session=…`. `role` is
 user's name, or one derived from the address. Add `-d 'key=…'` when
 `DEV_LOGIN_KEY` is set.
 
+## Deploying on Azure App Service
+
+This fork is deployed by `.github/workflows/architecture.yml` to **Fork
+staging**, <https://camilleepech-mathutrice-staging.azurewebsites.net>, an App
+Service app on a B1 Linux plan in Belgium Central, always on.
+
+- **Deploy on green.** A push to `camille-lab3` whose `architecture` and `test`
+  jobs both pass runs `deploy to staging`. Nothing else deploys: not a pull
+  request, not a red run, not another branch.
+- **One image per commit.** The job builds the `Dockerfile` once, tags it with
+  the commit and pushes it to GHCR (`ghcr.io/camilleepech/mathutrice:<commit>`,
+  public, so App Service pulls it without credentials). A commit pushed twice is
+  built once.
+- **Waits for the new version.** The image holds its commit as `REVISION`, which
+  the application sends back in the `X-Revision` header of every response. The
+  deploy passes only once `/dev/login` answers `200` with that commit, within
+  700 s; a previous container still answering does not count.
+- **One process.** The container runs `uvicorn mathutrice.app:app` on port 8000,
+  as `uvicorn` does locally, with one worker. Its `lifespan` creates the tables,
+  seeds the reference data and starts the scheduler that cleans old
+  conversations every hour.
+
+Staging's settings live in the GitHub Environment `staging`, never in a
+committed file: the variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` and `AZURE_WEBAPP_NAME`, and the
+secrets `DEV_LOGIN_KEY`, `SESSION_SECRET` and `LLM_API_KEY`. Every deploy writes
+them to the app (`.github/actions/deploy-to-app-service`), with `AUTH_MODE=dev`,
+`DATABASE_URL=sqlite:///./mathutrice.db`, `LLM_BASE_URL=https://api.mistral.ai/v1`
+and `LLM_MODEL=ministral-14b-latest`. The workflow logs in to Azure through
+OpenID Connect, as the identity `github-deploy`, whose only role is Website
+Contributor on the resource group `camilleepech-forks`; no Azure password is
+stored.
+
+Staging holds generated data and no real users, so it signs in through the
+[dev sign-in](#connexion-de-développement-auth_modedev), guarded by its own
+`DEV_LOGIN_KEY` and `SESSION_SECRET`: the one exception to the checklist's
+`AUTH_MODE` line above.
+
+**The data is reset at every deploy and every restart.** The SQLite file lives
+on the container's own disk (`WEBSITES_ENABLE_APP_SERVICE_STORAGE=false`), since
+App Service's lasting storage, `/home`, is a network share on which SQLite
+cannot take its locks. Each start creates the tables and seeds them again.
+
 ## Layout
 
 ```
