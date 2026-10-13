@@ -118,9 +118,10 @@ user's name, or one derived from the address. Add `-d 'key=…'` when
 
 ## Deploying on Azure App Service
 
-This fork is deployed by `.github/workflows/architecture.yml` to **Fork
-staging**, <https://camilleepech-mathutrice-staging.azurewebsites.net>, an App
-Service app on a B1 Linux plan in Belgium Central, always on.
+This fork is deployed by `.github/workflows/architecture.yml` to two App
+Service apps on one B1 Linux plan in Belgium Central, always on: **Fork
+staging**, <https://camilleepech-mathutrice-staging.azurewebsites.net>, and
+**Fork production**, <https://camilleepech-mathutrice-production.azurewebsites.net>.
 
 - **Deploy on green.** A push to `camille-lab3` whose `architecture` and `test`
   jobs both pass runs `deploy to staging`. Nothing else deploys: not a pull
@@ -137,22 +138,35 @@ Service app on a B1 Linux plan in Belgium Central, always on.
   as `uvicorn` does locally, with one worker. Its `lifespan` creates the tables,
   seeds the reference data and starts the scheduler that cleans old
   conversations every hour.
+- **Production, by promotion only.** A run of the workflow started by hand
+  reads its push runs on `camille-lab3`, newest first, logs each one it skips,
+  and deploys the image of the first whose `deploy to staging` job passed to
+  production. It never builds one, and it reads the runs, not the staging app:
+  after a failed deploy, staging is still set to the image that never answered,
+  and that image is never promoted. With no such run, it deploys nothing.
 
-Staging's settings live in the GitHub Environment `staging`, never in a
-committed file: the variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
-`AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP` and `AZURE_WEBAPP_NAME`, and the
-secrets `DEV_LOGIN_KEY`, `SESSION_SECRET` and `LLM_API_KEY`. Every deploy writes
+```sh
+gh workflow run architecture.yml --ref camille-lab3 --repo camilleepech/MATHutrice
+```
+
+Each environment's settings live in the GitHub Environment of the same name,
+`staging` or `production`, never in a committed file: the variables
+`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
+`AZURE_RESOURCE_GROUP` and `AZURE_WEBAPP_NAME`, and the secrets `DEV_LOGIN_KEY`, `SESSION_SECRET` and `LLM_API_KEY`. Every deploy writes
 them to the app (`.github/actions/deploy-to-app-service`), with `AUTH_MODE=dev`,
 `DATABASE_URL=sqlite:///./mathutrice.db`, `LLM_BASE_URL=https://api.mistral.ai/v1`
 and `LLM_MODEL=ministral-14b-latest`. The workflow logs in to Azure through
 OpenID Connect, as the identity `github-deploy`, whose only role is Website
 Contributor on the resource group `camilleepech-forks`; no Azure password is
-stored.
+stored. Its federated credentials trust GitHub's subject for this repository,
+which carries the owner's and the repository's numeric ids
+(`repo:camilleepech@145352402/MATHutrice@1387440488:environment:<name>`).
 
-Staging holds generated data and no real users, so it signs in through the
-[dev sign-in](#connexion-de-développement-auth_modedev), guarded by its own
-`DEV_LOGIN_KEY` and `SESSION_SECRET`: the one exception to the checklist's
-`AUTH_MODE` line above.
+Both environments hold generated data and no real users, so both sign in
+through the [dev sign-in](#connexion-de-développement-auth_modedev): the one
+exception to the checklist's `AUTH_MODE` line above. Each has its own
+`DEV_LOGIN_KEY` and `SESSION_SECRET`, never the other's: staging's key is the
+maintainer's own, production's is the one the simulated users sign in with.
 
 **The data is reset at every deploy and every restart.** The SQLite file lives
 on the container's own disk (`WEBSITES_ENABLE_APP_SERVICE_STORAGE=false`), since
